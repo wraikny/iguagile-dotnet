@@ -5,7 +5,7 @@ namespace Iguagile
 {
     public enum Protocol
     {
-        Tcp
+        Tcp,
     }
 
     public interface IClient : IDisposable

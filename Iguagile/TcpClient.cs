@@ -63,8 +63,7 @@ namespace Iguagile
             if (IsConnected && (_stream?.CanWrite ?? false))
             {
                 var size = data.Length;
-                var message = BitConverter.GetBytes((ushort)size);
-                message = message.Concat(data).ToArray();
+                var message = BitConverter.GetBytes((ushort)size).Concat(data).ToArray();
                 await _stream.WriteAsync(message, 0, message.Length);
             }
         }

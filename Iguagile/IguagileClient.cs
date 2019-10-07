@@ -19,7 +19,7 @@ namespace Iguagile
         MigrateHost,
         Register,
         Transform,
-        Rpc
+        Rpc,
     }
 
     public enum RpcTargets : byte
@@ -29,20 +29,20 @@ namespace Iguagile
         AllClientsBuffered,
         OtherClientsBuffered,
         Host,
-        Server
+        Server,
     }
 
     public class IguagileClient : IDisposable
     {
-        private IClient _client;
+        private IClient client;
 
-        private Dictionary<int, User> _users = new Dictionary<int, User>();
-        private Dictionary<string, object> _rpcMethods = new Dictionary<string, object>();
+        private readonly Dictionary<int, User> users = new Dictionary<int, User>();
+        private readonly Dictionary<string, object> rpcMethods = new Dictionary<string, object>();
 
         public int UserId { get; private set; }
         public bool IsHost { get; private set; }
 
-        public bool IsConnected => _client?.IsConnected ?? false;
+        public bool IsConnected => client?.IsConnected ?? false;
         
         public event Action OnConnected = delegate { };
         public event Action OnClosed = delegate { };
@@ -53,60 +53,54 @@ namespace Iguagile
             switch (protocol)
             {
                 case Protocol.Tcp:
-                    _client = new TcpClient();
+                    client = new TcpClient();
                     break;
                 default:
                     throw new ArgumentException("invalid protocol");
             }
 
-            _client.OnConnected += OnConnected;
-            _client.OnClosed += OnClosed;
-            _client.OnError += OnError;
-            _client.OnReceived += ClientReceived;
-            await _client.StartAsync(address, port);
+            client.OnConnected += OnConnected;
+            client.OnClosed += OnClosed;
+            client.OnError += OnError;
+            client.OnReceived += ClientReceived;
+            await client.StartAsync(address, port);
         }
 
         public void Disconnect()
         {
-            if (_client != null)
+            if (client != null)
             {
-                _client.Disconnect();
-                _client = null;
+                client.Disconnect();
+                client = null;
             }
         }
 
         public void AddRpc(string methodName, object receiver)
         {
-            lock(_rpcMethods)
+            lock(rpcMethods)
             {
-                _rpcMethods[methodName] = receiver;
+                rpcMethods[methodName] = receiver;
             }
         }
 
         public void RemoveRpc(object receiver)
         {
-            lock(_rpcMethods)
+            lock(rpcMethods)
             {
-                var removeList = new List<string>();
-                foreach (var rpcMethod in _rpcMethods)
+                foreach (var method in rpcMethods
+                    .Where(x => ReferenceEquals(x.Value, receiver))
+                    .Select(x => x.Key)
+                    .ToArray()
+                )
                 {
-                    if (ReferenceEquals(rpcMethod.Value, receiver))
-                    {
-                        removeList.Add(rpcMethod.Key);
-                    }
-                }
-
-                foreach (var method in removeList)
-                {
-                    _rpcMethods.Remove(method);
+                    rpcMethods.Remove(method);
                 }
             }
         }
 
         public async Task Rpc(string methodName, RpcTargets target, params object[] args)
         {
-            var objects = new object[] { methodName };
-            objects = objects.Concat(args).ToArray();
+            var objects = (new object[] { methodName }).Concat(args).ToArray();
             var data = Serialize(target, MessageType.Rpc, objects);
             await SendAsync(data);
         }
@@ -132,7 +126,7 @@ namespace Iguagile
 
             if (data.Length != 0)
             {
-                await _client.SendAsync(data);
+                await client.SendAsync(data);
             }
         }
 
@@ -169,14 +163,14 @@ namespace Iguagile
             var args = objects.Skip(1).ToArray();
 
             object behaviour;
-            lock (_rpcMethods)
+            lock (rpcMethods)
             {
-                if (!_rpcMethods.ContainsKey(methodName))
+                if (!rpcMethods.ContainsKey(methodName))
                 {
                     return;
                 }
 
-                behaviour = _rpcMethods[methodName];
+                behaviour = rpcMethods[methodName];
             }
 
             var type = behaviour.GetType();
@@ -187,12 +181,12 @@ namespace Iguagile
 
         private void AddUser(int id)
         {
-            _users[id] = new User(id);
+            users[id] = new User(id);
         }
 
         private void RemoveUser(int id)
         {
-            _users.Remove(id);
+            users.Remove(id);
         }
 
         private void MigrateHost()

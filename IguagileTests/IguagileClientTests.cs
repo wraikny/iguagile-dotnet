@@ -16,7 +16,7 @@ namespace IguagileTests
         {
             using (var client = new IguagileClient())
             {
-                client.OnConnected += () => client.Disconnect();
+                client.OnConnected += client.Disconnect;
                 var pool = new Semaphore(0, 1);
                 client.OnClosed += () => pool.Release(1);
                 client.OnError += e => Assert.Fail(e.Message);
